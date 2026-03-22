@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Бронирование 100 TL</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --seat-free: #475569;
+            --seat-selected: #10b981;
+            --seat-occupied: #ef4444;
+            --accent: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent; /* Убирает синюю рамку при нажатии на iPhone */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        h2 { margin-top: 10px; font-size: 1.5rem; }
+
+        .screen {
+            width: 90%;
+            height: 4px;
+            background: #94a3b8;
+            margin: 15px 0 30px 0;
+            box-shadow: 0 0 15px rgba(255,255,255,0.4);
+            border-radius: 10px;
+        }
+
+        /* Адаптивная сетка: 5 колонок для узких экранов, 10 для широких */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr); 
+            gap: 8px;
+            background: var(--card-bg);
+            padding: 12px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        @media (min-width: 480px) {
+            .grid { grid-template-columns: repeat(10, 1fr); }
+        }
+
+        .seat {
+            aspect-ratio: 1 / 1; /* Квадратные места */
+            background: var(--seat-free);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+            border-bottom: 3px solid rgba(0,0,0,0.3);
+        }
+
+        .seat:active { transform: scale(0.9); } /* Эффект нажатия */
+
+        .seat.selected { 
+            background: var(--seat-selected); 
+            border-color: #065f46;
+        }
+
+        .seat.occupied { 
+            background: var(--seat-occupied); 
+            opacity: 0.4;
+            border-color: #991b1b;
+        }
+
+        .info {
+            margin-top: 20px;
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .price-tag {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: var(--accent);
+            margin-bottom: 5px;
+        }
+
+        button {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 16px;
+            border-radius: 12px;
+            font-weight: 800;
+            width: 100%;
+            cursor: pointer;
+            font-size: 18px;
+            margin-top: 10px;
+        }
+
+        /* Модальное окно (адаптивное) */
+        #modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #ffffff;
+            color: #1e293b;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 0 100px rgba(0,0,0,0.8);
+            z-index: 100;
+            text-align: center;
+            width: 90%;
+            max-width: 340px;
+        }
+
+        .tg-link {
+            display: block;
+            margin: 15px 0;
+            background: #0088cc;
+            color: white;
+            text-decoration: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        
+        .overlay {
+            display: none;
+            position: fixed;
+            top:0; left:0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 90;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Бронирование мест</h2>
+    <div style="font-size: 0.9rem; opacity: 0.8;">1 место = 100 TL</div>
+    
+    <div class="screen"></div>
+
+    <div class="grid" id="seatingGrid"></div>
+
+    <div class="info">
+        <div class="price-tag"><span id="total-price">0</span> TL</div>
+        <div style="font-size: 0.85rem; color: #94a3b8;">Выбрано: <span id="numbers">—</span></div>
+        <button onclick="showBooking()">ЗАБРОНИРОВАТЬ</button>
+    </div>
+
+    <div class="overlay" id="overlay" onclick="closeModal()"></div>
+    <div id="modal">
+        <h3 style="margin: 0; color: var(--seat-selected)">ГОТОВО!</h3>
+        <p>Ваши места: <strong id="finalSeats"></strong></p>
+        <p>К оплате: <strong id="finalSum"></strong> <strong>TL</strong></p>
+        <p style="font-size: 0.9rem;">Напишите в Telegram для подтверждения:</p>
+        <a href="https://t.me/+77783506661" target="_blank" class="tg-link">+7 778 350 66 61</a>
+        <button onclick="closeModal()" style="background:#f1f5f9; font-size: 14px; padding: 10px;">Закрыть</button>
+    </div>
+
+    <script>
+        const grid = document.getElementById('seatingGrid');
+        const priceDisp = document.getElementById('total-price');
+        const numDisp = document.getElementById('numbers');
+        const pricePerSeat = 100;
+        let selected = [];
+
+        for (let i = 1; i <= 50; i++) {
+            const seat = document.createElement('div');
+            seat.classList.add('seat');
+            seat.innerText = i;
+            seat.onclick = () => {
+                if (seat.classList.contains('occupied')) return;
+                seat.classList.toggle('selected');
+                const id = parseInt(seat.innerText);
+                if (seat.classList.contains('selected')) {
+                    selected.push(id);
+                } else {
+                    selected = selected.filter(n => n !== id);
+                }
+                updateUI();
+                if ('vibrate' in navigator) navigator.vibrate(10); // Легкая вибрация на Android при нажатии
+            };
+            grid.appendChild(seat);
+        }
+
+        function updateUI() {
+            selected.sort((a,b) => a - b);
+            numDisp.innerText = selected.length ? selected.join(', ') : '—';
+            priceDisp.innerText = selected.length * pricePerSeat;
+        }
+
+        function showBooking() {
+            if (selected.length === 0) return alert("Пожалуйста, выберите место!");
+            document.getElementById('finalSeats').innerText = selected.join(', ');
+            document.getElementById('finalSum').innerText = selected.length * pricePerSeat;
+            document.getElementById('modal').style.display = 'block';
+            document.getElementById('overlay').style.display = 'block';
+
+            document.querySelectorAll('.seat.selected').forEach(s => {
+                s.classList.remove('selected');
+                s.classList.add('occupied');
+            });
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+            selected = [];
+            updateUI();
+        }
+    </script>
+</body>
+</html>
